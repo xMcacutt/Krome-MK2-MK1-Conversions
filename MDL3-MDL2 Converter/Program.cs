@@ -11,11 +11,37 @@ namespace MDL3_MDL2_Converter
     {
         public static void Main(string[] args)
         {
-            string mdl3Path = args[0];
-            string mdgPath = args[1];
-            string mdl2Path = args[2];
-            if (args.Length > 3) ANMConverter.ConvertANM(args[3], args[4], args[5]);
+            string inputDir = args[0];
+            string outputDir = args[1];
 
+            string[] files = Directory.GetFiles(inputDir);
+
+            foreach(string mdl in files.Where(f => f.EndsWith(".mdl")))
+            {
+                string baseName = Path.GetFileNameWithoutExtension(mdl);
+                string mdg = Path.Combine(inputDir, baseName + ".mdg");
+                if (Path.Exists(mdg))
+                {
+                    ConvertMDL(mdl, mdg, Path.Combine(outputDir, baseName + ".mdl"));
+                }
+            }
+            foreach (string anm in files.Where(f => f.EndsWith(".anm")))
+            {
+                string baseName = Path.GetFileNameWithoutExtension(anm);
+                string ang = Path.Combine(inputDir, baseName + ".ang");
+                if (Path.Exists(ang))
+                {
+                    ANMConverter.ConvertANM(anm, ang, Path.Combine(outputDir, baseName + ".anm"));
+                }
+            }
+            foreach (string file in Directory.GetFiles(inputDir).Where(f => f.EndsWith(".bbi")))
+            {
+                BADConverter.ConvertBAD(file, Path.Combine(outputDir, Path.GetFileNameWithoutExtension(file) + ".bad"));
+            }      
+        }
+
+        public static void ConvertMDL(string mdl3Path, string mdgPath, string mdl2Path)
+        {
             byte[] mdl3Data = File.ReadAllBytes(mdl3Path);
             byte[] mdgData = File.ReadAllBytes(mdgPath);
 
@@ -52,7 +78,7 @@ namespace MDL3_MDL2_Converter
             mdl3.AnimNodeDataOffset = BitConverter.ToUInt16(mdl3Data, 0x5C);
 
             List<string> textureNames = new();
-            for(int ti = 0; ti < mdl3.TextureCount; ti++)
+            for (int ti = 0; ti < mdl3.TextureCount; ti++)
             {
                 textureNames.Add(ReadString(mdl3Data, BitConverter.ToInt32(mdl3Data, (int)mdl3.TextureListOffset + (ti * 0x4))));
             }
@@ -64,9 +90,9 @@ namespace MDL3_MDL2_Converter
                 Component component = new();
                 mdl3.Components.Add(component);
             }
-            for(int ti = 0; ti < mdl3.TextureCount; ti++)
+            for (int ti = 0; ti < mdl3.TextureCount; ti++)
             {
-                for(int ci = 0; ci < mdl3.ComponentCount; ci++)
+                for (int ci = 0; ci < mdl3.ComponentCount; ci++)
                 {
                     int meshRef = BitConverter.ToInt32(mdl3Data, (int)mdl3.ObjectLookupTable + (ti * 0x4 * mdl3.ComponentCount) + (ci * 0x4));
                     if (meshRef == 0) continue;
@@ -132,7 +158,7 @@ namespace MDL3_MDL2_Converter
                 }
                 //Console.WriteLine(((int)mdl3.ObjectLookupTable + (ti * 0x4) + (ci * mdl3.TextureCount * 4)).ToString("X"));
                 //Console.WriteLine(meshRef.ToString("X"));
-                
+
             }
             sr.Close();
 
@@ -178,7 +204,7 @@ namespace MDL3_MDL2_Converter
                 c.ComponentName = ReadString(mdl3Data, BitConverter.ToInt32(mdl3Data, componentOffset + 0x30));
                 stream.Write(new byte[] { 0x0, 0x0, 0x0, 0x0 }); //COMPONENT NAME
                 stream.Write(new byte[] { 0x0, 0x0, 0x0, 0x0 }); //COMPONENT ADDL
-                stream.Write(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF});
+                stream.Write(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF });
                 stream.Write(new byte[] { 0x0, 0x0, 0x0, 0x0 }); //BONE COUNT
                 stream.Write(new byte[] { 0x0, 0x0 });
                 stream.Write(BitConverter.GetBytes(c.MeshCount)); //MESH COUNT 
@@ -187,7 +213,7 @@ namespace MDL3_MDL2_Converter
                 stream.Write(zeroInt);
             }
             Console.WriteLine("Generating MDL2 RefPoints");
-            if(mdl3.RefPointCount != 0) mdl2.RefPointsOffsetMDL2 = (uint)stream.Position;
+            if (mdl3.RefPointCount != 0) mdl2.RefPointsOffsetMDL2 = (uint)stream.Position;
             List<string> refPointNames = new List<string>();
             for (int i = 0; i < mdl3.RefPointCount; i++)
             {
@@ -203,7 +229,7 @@ namespace MDL3_MDL2_Converter
             foreach (Component c in mdl3.Components)
             {
                 c.MeshDescriptionOffset = (uint)stream.Position;
-                foreach(MeshDescription m in c.MeshDescriptions)
+                foreach (MeshDescription m in c.MeshDescriptions)
                 {
                     stream.Write(new byte[] { 0, 0, 0, 0 }); //TEXTURE NAME
                     stream.Write(new byte[] { 0, 0, 0, 0 }); //STRIP LIST OFFSET
@@ -211,7 +237,7 @@ namespace MDL3_MDL2_Converter
                     stream.Write(BitConverter.GetBytes(m.StripCount)); //STRIP COUNT
                 }
             }
-            foreach(Component c in mdl3.Components)
+            foreach (Component c in mdl3.Components)
             {
                 foreach (MeshDescription m in c.MeshDescriptions)
                 {
@@ -262,7 +288,7 @@ namespace MDL3_MDL2_Converter
             mdl2.StringTableOffset = (uint)stream.Position;
             Dictionary<string, int> stringMap = new();
             // WRITE IN STRING TABLE
-            foreach(string s in mdl3Strings)
+            foreach (string s in mdl3Strings)
             {
                 stringMap.Add(s, (int)stream.Position);
                 stream.Write(Encoding.ASCII.GetBytes(s));
@@ -287,15 +313,15 @@ namespace MDL3_MDL2_Converter
             Array.Copy(BitConverter.GetBytes(mdl2.StringTableOffset), 0, bytes, 0x44, 4);
 
             int componentIndex = 0;
-            foreach(Component c in mdl3.Components)
+            foreach (Component c in mdl3.Components)
             {
                 //COMPONENT NAME
                 Array.Copy(BitConverter.GetBytes(stringMap[c.ComponentName]), 0, bytes, mdl2.ComponentDescriptionsOffset + (0x50 * componentIndex) + 0x30, 4);
                 //MESH DESCRIPTION OFFSET
                 Array.Copy(BitConverter.GetBytes(c.MeshDescriptionOffset), 0, bytes, mdl2.ComponentDescriptionsOffset + (0x50 * componentIndex) + 0x44, 4);
-                
+
                 int meshIndex = 0;
-                foreach(MeshDescription m in c.MeshDescriptions)
+                foreach (MeshDescription m in c.MeshDescriptions)
                 {
                     int mStartPos = (int)c.MeshDescriptionOffset + (0x10 * meshIndex);
                     //TEXTURE NAME

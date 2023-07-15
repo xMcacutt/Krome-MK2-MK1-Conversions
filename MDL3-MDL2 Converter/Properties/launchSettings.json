@@ -2,7 +2,7 @@
   "profiles": {
     "MDL3-MDL2 Converter": {
       "commandName": "Project",
-      "commandLineArgs": "\"D:\\Ty\\Krome\\ty2ps2 rkv ext\\A043_Steve.mdl\"\r\n\"D:\\Ty\\Krome\\ty2ps2 rkv ext\\A043_Steve.mdg\"\r\n\"C:\\Users\\admin\\Documents\\MT2P\\Patch_PC\\A043_Steve.mdl\"\r\n\"D:\\Ty\\Krome\\ty2ps2 rkv ext\\A043_Steve.anm\"\r\n\"D:\\Ty\\Krome\\ty2ps2 rkv ext\\A043_Steve.ang\"\r\n\"C:\\Users\\admin\\Documents\\MT2P\\Patch_PC\\A043_Steve.anm\""
+      "commandLineArgs": "\"C:\\Users\\admin\\Documents\\MT2P\\Patch_PC\\MK2-MK1 Testing\\Input\"\r\n\"C:\\Users\\admin\\Documents\\MT2P\\Patch_PC\\MK2-MK1 Testing\\Output\""
     }
   }
 }

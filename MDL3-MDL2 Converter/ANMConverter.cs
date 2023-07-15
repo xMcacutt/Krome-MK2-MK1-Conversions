@@ -29,7 +29,7 @@ namespace MDL3_MDL2_Converter
             stream.Write(new byte[] { 0x0, 0x0, 0x0, 0x19 });
             int anm3TransformInfoOffset = (int)BitConverter.ToUInt32(anmData, 0x8);
             anm2.TransformsCount = (int)BitConverter.ToUInt32(anmData, anm3TransformInfoOffset + 0x4);
-            Console.WriteLine(anm2.TransformsCount);
+            //Console.WriteLine(anm2.TransformsCount);
             stream.Write(BitConverter.GetBytes(anm2.TransformsCount)); // Transform Count
 
             anm2.TransformsOffset = 0x30 + anm2.BoneDescCount * 0x20;
@@ -41,12 +41,12 @@ namespace MDL3_MDL2_Converter
 
             for (int i = 0; i < anm2.BoneDescCount; i++)
             {
-                Console.WriteLine("Bone: " + i);
+                //Console.WriteLine("Bone: " + i);
                 Bone bone = new();
                 int boneOffset = 0x10 + i * 0x20;
                 bone.NodePos = Enumerable.Range(0, 4).Select(index => BitConverter.ToSingle(anmData, boneOffset + index * 0x4)).ToArray();
                 stream.Write(anmData, boneOffset + 0x0, 0x10);
-                int nameOffset = BitConverter.ToUInt16(anmData, boneOffset + 0x10);
+                int nameOffset = (int)BitConverter.ToUInt32(anmData, boneOffset + 0x10);
                 bone.Name = Program.ReadString(anmData, nameOffset);
                 stream.Write(new byte[4]); // Bone Name Offset !!!
                 bone.ParentID = BitConverter.ToUInt16(anmData, boneOffset + 0x16);
@@ -59,7 +59,7 @@ namespace MDL3_MDL2_Converter
             foreach (Bone bone in anm2.Bones)
             {
                 int boneOffset = 0x10 + anm2.Bones.IndexOf(bone) * 0x20;
-                Console.WriteLine(bone.KeyFrameCount);
+                //Console.WriteLine(bone.KeyFrameCount);
                 int anm3KeyFrameOffset = (int)BitConverter.ToUInt32(anmData, boneOffset + 0x18);
                 for (int k = 0; k < bone.KeyFrameCount; k++)
                 {
