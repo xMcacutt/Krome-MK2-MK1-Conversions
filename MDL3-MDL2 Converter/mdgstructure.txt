@@ -1,0 +1,36 @@
+MDG3
+FF bytes to pad line
+unk1 short
+unk2 short
+unused short
+strip_count short
+unk3 short
+0x10 short
+unused int
+
+In the mdl, there is a list of meshes.
+Components are separated by 00 00 00 00 terminators.
+0x68 in the mdl is a pointer to the list.
+The list is a list of ints. ie
+int1 int2 int3 terminator int4 int5 terminator int6
+The ints are references to strips. 
+These strips are the first strips of a mesh. 
+The mesh consists of strips which are referenced in the previous strip.
+Once this reference equals 0, this is the final strip of the mesh.
+A component can have multiple meshes.
+These meshes are consecutive in the list in the mdl.
+
+STRIP
+mesh_line_count short - 0xFFFF if not first strip
+unk1 short - 4096
+unused int
+strip_data_mark 00 80 02 6C LE
+unk2 int
+unk3 float
+unk4 int CD CD CD CD
+unk5 ? - Sometimes FF FF FF FF
+strip_origin? vector4f
+unk6 ? - always 04 01 00 01 LE
+vector3f_data_mark 02 80 XX 68
+	XX - vector3f_count
+vector3f[XX]
