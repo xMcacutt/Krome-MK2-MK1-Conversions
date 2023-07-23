@@ -1,6 +1,9 @@
-﻿using System;
+﻿using MoreLinq;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
@@ -26,7 +29,7 @@ namespace MDL3_MDL2_Converter
             stream.Write(BitConverter.GetBytes(anm2.BoneDescCount)); // Bone Desc Count
             stream.Write(BitConverter.GetBytes(0x30)); // Bone Desc Offset
             stream.Write(BitConverter.GetBytes(0x0));
-            stream.Write(new byte[] { 0x0, 0x0, 0x0, 0x19 });
+            stream.Write(new byte[] { 0x19, 0x0, 0x0, 0x0 });
             int anm3TransformInfoOffset = (int)BitConverter.ToUInt32(anmData, 0x8);
             anm2.TransformsCount = (int)BitConverter.ToUInt32(anmData, anm3TransformInfoOffset + 0x4);
             //Console.WriteLine(anm2.TransformsCount);
@@ -44,13 +47,15 @@ namespace MDL3_MDL2_Converter
                 //Console.WriteLine("Bone: " + i);
                 Bone bone = new();
                 int boneOffset = 0x10 + i * 0x20;
-                bone.NodePos = Enumerable.Range(0, 4).Select(index => BitConverter.ToSingle(anmData, boneOffset + index * 0x4)).ToArray();
-                stream.Write(anmData, boneOffset + 0x0, 0x10);
+                bone.NodePos = Enumerable.Range(0, 3).Select(index => BitConverter.ToSingle(anmData, boneOffset + index * 0x4)).ToArray();
+                stream.Write(anmData, boneOffset + 0x0, 0xC);
+                stream.Write(new byte[4]);
                 int nameOffset = (int)BitConverter.ToUInt32(anmData, boneOffset + 0x10);
                 bone.Name = Program.ReadString(anmData, nameOffset);
                 stream.Write(new byte[4]); // Bone Name Offset !!!
                 bone.ParentID = BitConverter.ToUInt16(anmData, boneOffset + 0x16);
-                stream.Write(BitConverter.GetBytes((uint)bone.ParentID)); // Parent ID
+                if (bone.ParentID == 0xFF) stream.Write(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF });
+                else stream.Write(BitConverter.GetBytes((uint)bone.ParentID)); // Parent ID
                 bone.KeyFrameCount = BitConverter.ToUInt16(anmData, boneOffset + 0x14);
                 stream.Write(BitConverter.GetBytes(bone.KeyFrameCount));
                 stream.Write(new byte[4]); // Keyframes Offset !!!
@@ -66,23 +71,38 @@ namespace MDL3_MDL2_Converter
                     KeyFrame keyFrame = new KeyFrame();
                     keyFrame.FrameIndex = BitConverter.ToUInt16(anmData, k * 0x8 + anm3KeyFrameOffset + 0x0);
                     int[] angIndices = new int[3];
-                    for(int x = 0; x < 3; x++)
+                    angIndices[0] = BitConverter.ToUInt16(anmData, k * 0x8 + anm3KeyFrameOffset + 0x2);
+                    angIndices[1] = BitConverter.ToUInt16(anmData, k * 0x8 + anm3KeyFrameOffset + 0x4);
+                    angIndices[2] = BitConverter.ToUInt16(anmData, k * 0x8 + anm3KeyFrameOffset + 0x6);
+                    for (int i = 0; i < 3; i++)
                     {
-                        angIndices[x] = BitConverter.ToUInt16(anmData, k * 0x8 + anm3KeyFrameOffset + 0x2 * (x + 1));
-                        ushort[] transformShorts = new ushort[4];
-                        for (int n = 0; n < 4; n++)
+                        short[] transformShorts = new short[4];
+                        transformShorts[0] = BitConverter.ToInt16(angData, 0x10 + 0x8 * angIndices[i] + 0x0);
+                        transformShorts[1] = BitConverter.ToInt16(angData, 0x10 + 0x8 * angIndices[i] + 0x2);
+                        transformShorts[2] = BitConverter.ToInt16(angData, 0x10 + 0x8 * angIndices[i] + 0x4);
+                        transformShorts[3] = BitConverter.ToInt16(angData, 0x10 + 0x8 * angIndices[i] + 0x6);
+                        if (i == 0)
                         {
-                            transformShorts[n] = BitConverter.ToUInt16(angData, 0x10 + 0x8 * angIndices[x] + n * 0x2);
+                            keyFrame.Transform[i] = new float[4];//DecompressVector(transformShorts);
                         }
-                        keyFrame.Transform[x] = DecompressVector(transformShorts); 
-                        byte[] transformBytes = GenerateTransformBytes(keyFrame.Transform[x], x == 0, keyFrame.FrameIndex);
+                        if (i == 1)
+                        {
+                            keyFrame.Transform[i] = new float[4];
+                            for(int s = 0; s < 4; s++)
+                            {
+                                keyFrame.Transform[i][s] = transformShorts[s];
+                                keyFrame.Transform[i][s] /= 16384;
+                            }
+                        }
+                        if (i == 2) keyFrame.Transform[2] = ConvertScaling(transformShorts);
+                        byte[] transformBytes = GenerateTransformBytes(keyFrame.Transform[i], i == 0, keyFrame.FrameIndex);
                         string hash = Convert.ToBase64String(transformBytes);
                         if (!transforms.TryAdd(hash, (uint)stream.Position))
                         {
-                            keyFrame.TransformOffsets[x] = transforms[hash];
+                            keyFrame.TransformOffsets[i] = transforms[hash];
                             continue;
                         }
-                        keyFrame.TransformOffsets[x] = (uint)stream.Position;
+                        keyFrame.TransformOffsets[i] = (uint)stream.Position;
                         stream.Write(transformBytes, 0, 0x10);
                     }
                     bone.KeyFrames.Add(keyFrame);
@@ -100,6 +120,7 @@ namespace MDL3_MDL2_Converter
             }
 
             Dictionary<string, uint> stringSet = new();
+            uint stringTableOffset = (uint)stream.Position;
             foreach(Bone bone in anm2.Bones)
             {
                 stringSet.Add(bone.Name, (uint)stream.Position);
@@ -115,6 +136,8 @@ namespace MDL3_MDL2_Converter
             {
                 Array.Copy(BitConverter.GetBytes(stringSet[anm2.Bones[i].Name]), 0x0, anm2Data, 0x30 + i * 0x20 + 0x10, 4);
                 Array.Copy(BitConverter.GetBytes(keyFrameStartOffsets[i]), 0x0, anm2Data, 0x30 + i * 0x20 + 0x1C, 4);
+                Array.Copy(BitConverter.GetBytes((uint)stringSet.Count), 0, anm2Data, 0x20, 0x4);
+                Array.Copy(BitConverter.GetBytes(stringTableOffset), 0, anm2Data, 0x24, 0x4);
             }
 
             using FileStream fileStream = new(anm2Path, FileMode.Create);
@@ -122,37 +145,48 @@ namespace MDL3_MDL2_Converter
             fileStream.Close();
         }
 
-        public static float[] DecompressVector(ushort[] input)
+        public static float[] DecompressVector(short[] input)
         {
-            uint checker;
-            uint key;
-            uint buffer;
             float[] output = new float[3];
-
-            key = (uint)input[3];
-            buffer = 0;
-
-            checker = (key >> 0xA) & 0x1f;
-            if (checker != 0) buffer = ((uint)(input[0] & 0x7fff) << 0x8) | ((uint)(input[1] & 0x8000) << 0x10) | (checker + 0x70) * 0x800000;
-            output[0] = Convert.ToSingle(buffer);
-            buffer = 0;
-
-            checker = (key >> 0x5) & 0x1f;
-            if (checker != 0) buffer = ((uint)(input[1] & 0x7fff) << 0x8) | ((uint)(input[1] & 0x8000) << 0x10) | (checker + 0x70) * 0x800000;
-            output[1] = buffer;
-            buffer = 0;
-
-            if ((key & 0x1f) != 0) buffer = ((uint)(input[2] & 0x7fff) << 0x8) | ((uint)(input[2] & 0x8000) << 0x10) | ((key & 0x1f) + 0x70) * 0x800000; ;
-            output[2] = buffer;
+            for (int i = 0; i < 3; i++)
+            {
+                int ecx = 0;
+                int edx = (input[3] >> (0xA - (0x5 * i))) & 0x1F;
+                if (edx != 0)
+                {
+                    int eax = ecx = input[i];
+                    eax &= 0x7FFF;
+                    ecx = ((int)(ecx & 0xFFFF8000) << 8) | eax;
+                    eax = edx + 0x70;
+                    ecx = ecx << 0x8 | (eax << 0x17);
+                }
+                output[i] = BitConverter.ToSingle(BitConverter.GetBytes(ecx));
+            }
             return output;
+        }
+
+        public static float[] ConvertScaling(short[] input)
+        {
+            List<float> output = new()
+            {
+                1.0f,
+                1.0f,
+                1.0f,
+                0.0f
+            };
+            return output.ToArray();
         }
 
         public static byte[] GenerateTransformBytes(float[] transform, bool isPos, int frameIndex)
         {
             byte[] bytes = new byte[0x10];
-            Buffer.BlockCopy(transform, 0, bytes, 0, 0xC);
-            if (isPos) Buffer.BlockCopy(BitConverter.GetBytes(frameIndex), 0, bytes, 0xC, 0x4);
-            else Buffer.BlockCopy(new byte[] { 0x0, 0x0, 0x80, 0x3F }, 0, bytes, 0xC, 0x4);
+            if (isPos)
+            {
+                Buffer.BlockCopy(transform, 0x0, bytes, 0x0, 0xC);
+                Buffer.BlockCopy(BitConverter.GetBytes(frameIndex), 0, bytes, 0xC, 0x4);
+                return bytes;
+            }
+            Buffer.BlockCopy(transform, 0, bytes, 0, 0x10);
             return bytes;
         }
     }
@@ -168,7 +202,7 @@ namespace MDL3_MDL2_Converter
 
     public class Bone
     {
-        public float[] NodePos = new float[4];
+        public float[] NodePos = new float[3];
         public string Name;
         public int NameOffset;
         public int ParentID;
