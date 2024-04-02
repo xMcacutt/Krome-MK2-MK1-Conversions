@@ -83,7 +83,8 @@ namespace MDL3_MDL2_Converter
                         transformShorts[3] = BitConverter.ToInt16(angData, 0x10 + 0x8 * angIndices[i] + 0x6);
                         if (i == 0)
                         {
-                            keyFrame.Transform[i] = new float[4];//DecompressVector(transformShorts);
+                            if (bone.ParentID == 0xFFFF) keyFrame.Transform[i] = DecompressVector(transformShorts); //new float[4];
+                            else keyFrame.Transform[i] = new float[3];
                         }
                         if (i == 1)
                         {
@@ -94,7 +95,7 @@ namespace MDL3_MDL2_Converter
                                 keyFrame.Transform[i][s] /= 16384;
                             }
                         }
-                        if (i == 2) keyFrame.Transform[2] = ConvertScaling(transformShorts);
+                        if (i == 2) keyFrame.Transform[i] = ConvertScaling(transformShorts);//DecompressVector(transformShorts); 
                         byte[] transformBytes = GenerateTransformBytes(keyFrame.Transform[i], i == 0, keyFrame.FrameIndex);
                         string hash = Convert.ToBase64String(transformBytes);
                         if (!transforms.TryAdd(hash, (uint)stream.Position))

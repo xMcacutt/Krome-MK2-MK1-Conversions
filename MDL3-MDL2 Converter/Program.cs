@@ -15,7 +15,9 @@ namespace MDL3_MDL2_Converter
         {
             string inputDir = args[0];
             string outputDir = args[1];
-
+            //string inputDir = "C:/Users/admin/Documents/MT2P/MK2-MK1 Testing/Input";
+            //string outputDir = "C:/Users/admin/Documents/MT2P/MK2-MK1 Testing/Output";
+            
             string[] files = Directory.GetFiles(inputDir);
 
             foreach(string mdl in files.Where(f => f.EndsWith(".mdl")))
@@ -95,7 +97,7 @@ namespace MDL3_MDL2_Converter
                 textureNames.Add(ReadString(mdl3Data, BitConverter.ToInt32(mdl3Data, (int)mdl3.TextureListOffset + (ti * 0x4))));
             }
 
-            //Console.WriteLine("Loading Data From MDG");
+            Console.WriteLine("Loading Data From MDG");
             using var sr = File.OpenRead(mdgPath);
             for (int ci = 0; ci < mdl3.ComponentCount; ci++)
             {
@@ -130,7 +132,7 @@ namespace MDL3_MDL2_Converter
                             byte[] buffer = new byte[4];
                             byte[] startMarker = new byte[] { 0x0, 0x80, 0x02, 0x6C };
                             byte[] endMarker1 = new byte[] { 0xFF, 0xFF, 0x0, 0x1 };
-                            //Console.WriteLine(sr.Position);
+                            Console.WriteLine(sr.Position);
                             while (!buffer.SequenceEqual(startMarker))
                             {
                                 sr.Read(buffer, 0, 4);
@@ -143,29 +145,41 @@ namespace MDL3_MDL2_Converter
                             strip.byteData = new byte[0x4 * strip.VertexCount];
                             sr.Seek(0x27, SeekOrigin.Current);
                             strip.floatDataStart = (uint)sr.Position;
-                            //Console.WriteLine("float start: " + sr.Position.ToString("X"));
+                            Console.WriteLine("float start: " + sr.Position.ToString("X"));
                             sr.Read(strip.floatData, 0, 0xC * strip.VertexCount);
                             sr.Seek(0x2, SeekOrigin.Current);
                             sr.Read(buffer, 0, 2);
-                            //Console.WriteLine(sr.Position.ToString("X"));
-                            //Console.WriteLine("char start: " + sr.Position.ToString("X"));
-                            if (buffer[1] == 0x65)
+                            Console.WriteLine("char start: " + sr.Position.ToString("X"));
+                            if (buffer[1] == 0x6A)
                             {
                                 strip.charData = new byte[strip.VertexCount * 0x4];
-                                //Console.WriteLine("short start: " + sr.Position.ToString("X"));
-                                for (int i = 0; i < strip.VertexCount; i++) sr.Read(strip.shortData, i * 0x8, 0x4);
+                                for(int i = 0; i < strip.VertexCount; i++) sr.Read(strip.charData, i * 0x4, 0x3);
+                                sr.Seek(0x4, SeekOrigin.Current);
+                                sr.Seek(strip.VertexCount % 4, SeekOrigin.Current);
+                                Console.WriteLine("short start 6A: " + sr.Position.ToString("X"));
+                                for (int i = 0; i < strip.VertexCount; i++) sr.Read(strip.shortData, i * 8, 0x4);
                             }
                             else
-                            {;
-                                for (int i = 0; i < strip.VertexCount; i++)
+                            {
+                                if (buffer[1] == 0x65)
                                 {
-                                    sr.Read(strip.charData, i * 0x4, 0x3);
-                                    byte[] boneIndexBuffer = new byte[1];
-                                    sr.Read(boneIndexBuffer, 0, 0x1);
-                                    byte boneIndex = (byte)(boneIndexBuffer[0] >> 1);
-                                    if (animNodeListIndex != 0xFFFF) boneIndex = (byte)((animNodeLists[animNodeListIndex][boneIndex] + 0x1) << 1);
-                                    else boneIndex = (byte)(boneIndex << 1);
-                                    strip.charData[i * 0x4 + 0x3] = boneIndex;
+                                    strip.charData = new byte[strip.VertexCount * 0x4];
+                                    //Console.WriteLine("short start 65: " + sr.Position.ToString("X"));
+                                    for (int i = 0; i < strip.VertexCount; i++) sr.Read(strip.shortData, i * 0x8, 0x4);
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < strip.VertexCount; i++)
+                                    {
+                                        sr.Read(strip.charData, i * 0x4, 0x3);
+                                        byte[] boneIndexBuffer = new byte[1];
+                                        sr.Read(boneIndexBuffer, 0, 0x1);
+                                        byte boneIndex = (byte)(boneIndexBuffer[0] >> 1);
+                                        //Console.WriteLine(boneIndex);
+                                        if (animNodeListIndex != 0xFFFF) boneIndex = (byte)((animNodeLists[animNodeListIndex][boneIndex] + 0x1) << 1);
+                                        else boneIndex = (byte)(boneIndex << 1);
+                                        strip.charData[i * 0x4 + 0x3] = boneIndex;
+                                    }
                                 }
                                 sr.Seek(0x4, SeekOrigin.Current);
                                 //Console.WriteLine("short start: " + sr.Position.ToString("X"));
@@ -175,6 +189,7 @@ namespace MDL3_MDL2_Converter
                                     byte[] boneIndexBuffer = new byte[2];
                                     sr.Read(boneIndexBuffer, 0, 0x2);
                                     ushort boneIndex = (ushort)(BitConverter.ToUInt16(boneIndexBuffer) >> 2);
+                                    //Console.WriteLine(sr.Position.ToString("X2") + " " + boneIndex);
                                     if(animNodeListIndex != 0xFFFF) boneIndex = (ushort)((animNodeLists[animNodeListIndex][boneIndex] + 0x1) << 2);
                                     else boneIndex = (byte)(boneIndex << 2);
                                     Array.Copy(BitConverter.GetBytes(boneIndex), 0, strip.shortData, 0x6 + i * 0x8, 2);
@@ -436,7 +451,7 @@ namespace MDL3_MDL2_Converter
             int endOfString = Array.IndexOf<byte>(bytes, 0x0, position);
             if (endOfString == position) return string.Empty;
             string s = Encoding.ASCII.GetString(bytes, position, endOfString - position);
-            return s.Replace(" ", @"___");
+            return s;
         }
     }
 }
